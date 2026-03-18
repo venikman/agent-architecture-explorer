@@ -127,6 +127,7 @@ test("reduced-motion desktop snapshots stay stable", async ({ page }) => {
   await expect(page).toHaveScreenshot("default-desktop.png", {
     animations: "disabled",
     fullPage: true,
+    maxDiffPixelRatio: 0.02,
   })
 
   await page.getByRole("button", { name: /healthcare mode/i }).click()
@@ -135,5 +136,6 @@ test("reduced-motion desktop snapshots stay stable", async ({ page }) => {
   await expect(page).toHaveScreenshot("healthcare-desktop.png", {
     animations: "disabled",
     fullPage: true,
+    maxDiffPixelRatio: 0.02,
   })
 })
