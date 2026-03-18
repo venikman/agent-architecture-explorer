@@ -1,10 +1,16 @@
 import * as React from "react"
-import { createTLStore, Tldraw, useEditor, useValue, type Editor } from "tldraw"
-import { useReducedMotion } from "motion/react"
+import {
+  ReactFlow,
+  useReactFlow,
+  useViewport,
+  type Edge,
+  type Node,
+} from "@xyflow/react"
 
 import {
   NODE_COLORS,
   buildDiagramScene,
+  buildNodeDetailContext,
   getDescriptiveNodes,
   type DiagramNode as DiagramNodeData,
   type DiagramScene,
@@ -21,12 +27,14 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { DiagramDetailSheet } from "@/components/diagrams/DiagramDetailSheet"
-import { buildCurvedPath } from "@/components/diagrams/diagram-geometry"
 import {
-  buildCanvasShapes,
-  type DiagramCanvasShapeRecord,
-} from "@/components/diagrams/tldraw-adapter"
-import { agentShapeUtils } from "@/components/diagrams/tldraw-shapes"
+  nodeTypes,
+  type AgentNodeData,
+} from "@/components/diagrams/flow-nodes"
+import {
+  edgeTypes,
+  type AgentEdgeData,
+} from "@/components/diagrams/flow-edges"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface DiagramCanvasProps {
@@ -34,284 +42,44 @@ interface DiagramCanvasProps {
   healthcareStage: HealthcareStage
 }
 
-function renderStaticLabel(node: DiagramNodeData) {
-  const lines = node.label.split("\n")
-  const lineHeight = lines.length > 1 ? 18 : 0
-  const firstLineY = node.y + node.h / 2 - ((lines.length - 1) * lineHeight) / 2
+/* ─── Scene → React Flow adapter ─── */
 
-  return lines.map((line, index) => (
-    <tspan
-      key={`${node.id}-${line}-${index}`}
-      x={node.x + node.w / 2}
-      y={firstLineY + index * lineHeight}
-    >
-      {line}
-    </tspan>
-  ))
-}
-
-function StaticDiagramSurface({ scene }: { scene: DiagramScene }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className="absolute inset-0 block"
-      height={scene.height}
-      viewBox={`0 0 ${scene.width} ${scene.height}`}
-      width={scene.width}
-    >
-      <defs>
-        {scene.arrows.map((arrow) => (
-          <marker
-            id={`static-arrow-${arrow.id}`}
-            key={arrow.id}
-            markerHeight="8"
-            markerUnits="userSpaceOnUse"
-            markerWidth="8"
-            orient="auto"
-            refX="7"
-            refY="3"
-          >
-            <path d="M 0 0 L 8 3 L 0 6 z" fill="var(--diagram-arrow)" />
-          </marker>
-        ))}
-      </defs>
-
-      {scene.arrows.map((arrow) => {
-        const path = buildCurvedPath({
-          startX: arrow.fromPoint.x,
-          startY: arrow.fromPoint.y,
-          endX: arrow.toPoint.x,
-          endY: arrow.toPoint.y,
-          direction: arrow.direction,
-        })
-
-        return (
-          <path
-            d={path}
-            fill="none"
-            key={arrow.id}
-            markerEnd={`url(#static-arrow-${arrow.id})`}
-            stroke="var(--diagram-arrow)"
-            strokeDasharray={arrow.dashed ? "7 5" : undefined}
-            strokeLinecap="round"
-            strokeWidth={1.6}
-          />
-        )
-      })}
-
-      {scene.nodes.map((node) => {
-        const colors = NODE_COLORS[node.type]
-        const isIO = node.type === "io"
-        const isLLM = node.type === "llm"
-        const isDanger = node.type === "danger"
-
-        return (
-          <g key={node.id}>
-            {isDanger ? (
-              <rect
-                fill="none"
-                height={node.h + 12}
-                rx={isIO ? (node.h + 12) / 2 : 18}
-                stroke={colors.border}
-                strokeDasharray="8 5"
-                strokeWidth={1.25}
-                width={node.w + 12}
-                x={node.x - 6}
-                y={node.y - 6}
-              />
-            ) : null}
-
-            <rect
-              fill={colors.fill}
-              height={node.h}
-              rx={isIO ? node.h / 2 : 18}
-              stroke={colors.border}
-              strokeWidth={1.5}
-              width={node.w}
-              x={node.x}
-              y={node.y}
-            />
-
-            {isLLM ? (
-              <line
-                stroke={colors.text}
-                strokeLinecap="round"
-                strokeWidth={2}
-                x1={node.x + 14}
-                x2={node.x + Math.max(node.w - 14, 14)}
-                y1={node.y + node.h - 12}
-                y2={node.y + node.h - 12}
-              />
-            ) : null}
-
-            <text
-              dominantBaseline="middle"
-              fill={colors.text}
-              fontFamily="'Geist Variable', system-ui, sans-serif"
-              fontSize={node.w >= 180 ? 16 : 14}
-              fontWeight={600}
-              textAnchor="middle"
-            >
-              {renderStaticLabel(node)}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-
-function StaticDiagramMarkerOverlay({
-  descriptiveNodes,
-  selectedNodeId,
-  setSelectedNodeId,
-}: {
-  descriptiveNodes: DiagramNodeData[]
-  selectedNodeId: string | null
-  setSelectedNodeId: (nodeId: string) => void
-}) {
-  return (
-    <div className="pointer-events-none absolute inset-0 z-10">
-      {descriptiveNodes.map((node) => {
-        const colors = NODE_COLORS[node.type]
-        const isSelected = selectedNodeId === node.id
-
-        return (
-          <button
-            aria-label={`Select ${node.label.replaceAll("\n", " ")}`}
-            className="pointer-events-auto absolute flex size-6 items-center justify-center rounded-full border bg-background/95 shadow-sm transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            key={node.id}
-            onClick={() => setSelectedNodeId(node.id)}
-            style={{
-              borderColor: isSelected ? colors.text : colors.border,
-              color: colors.text,
-              left: node.x + node.w - 14,
-              top: node.y - 10,
-            }}
-            type="button"
-          >
-            <span
-              className="size-2 rounded-full"
-              style={{ background: colors.text }}
-            />
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function ReadOnlyTldrawSurface({
-  descriptiveNodes,
-  shapeRecords,
-  selectedNodeId,
-  setSelectedNodeId,
-}: {
-  descriptiveNodes: DiagramNodeData[]
-  shapeRecords: DiagramCanvasShapeRecord[]
-  selectedNodeId: string | null
-  setSelectedNodeId: (nodeId: string) => void
-}) {
-  const reduceMotion = useReducedMotion()
-  const editorRef = React.useRef<Editor | null>(null)
-  const renderedShapeIdsRef = React.useRef<Set<DiagramCanvasShapeRecord["id"]>>(
-    new Set()
-  )
-
-  const syncEditorScene = React.useCallback(
-    (editor: Editor) => {
-      const nextShapeIds = new Set(shapeRecords.map((shape) => shape.id))
-      const currentShapeIds = renderedShapeIdsRef.current
-      const existingShapeIds = new Set(currentShapeIds)
-      const createQueue: DiagramCanvasShapeRecord[] = []
-      const updateQueue: DiagramCanvasShapeRecord[] = []
-
-      for (const shape of shapeRecords) {
-        if (existingShapeIds.has(shape.id)) {
-          updateQueue.push(shape)
-        } else {
-          createQueue.push(shape)
-        }
-      }
-
-      const deleteQueue = [...existingShapeIds].filter(
-        (shapeId) => !nextShapeIds.has(shapeId)
-      )
-
-      editor.setCameraOptions({ isLocked: false })
-      editor.user.updateUserPreferences({
-        animationSpeed: reduceMotion ? 0 : 1,
-      })
-      editor.updateInstanceState({ isReadonly: false })
-
-      if (createQueue.length > 0) {
-        editor.createShapes(createQueue)
-      }
-
-      if (updateQueue.length > 0) {
-        editor.updateShapes(updateQueue)
-      }
-
-      if (deleteQueue.length > 0) {
-        editor.deleteShapes(deleteQueue)
-      }
-
-      editor.setCamera(
-        { x: 0, y: 0, z: 1 },
-        { animation: { duration: reduceMotion ? 0 : 240 } }
-      )
-      editor.updateInstanceState({ isReadonly: true })
-      editor.setCurrentTool("hand")
-      renderedShapeIdsRef.current = nextShapeIds
+function buildFlowNodes(scene: DiagramScene): Node<AgentNodeData>[] {
+  return scene.nodes.map((node) => ({
+    id: node.id,
+    type: "agentNode",
+    position: { x: node.x, y: node.y },
+    data: {
+      label: node.label,
+      nodeType: node.type,
+      w: node.w,
+      h: node.h,
     },
-    [reduceMotion, shapeRecords]
-  )
-
-  const handleMount = React.useCallback(
-    (editor: Editor) => {
-      editorRef.current = editor
-      syncEditorScene(editor)
-    },
-    [syncEditorScene]
-  )
-
-  React.useEffect(() => {
-    if (editorRef.current) {
-      syncEditorScene(editorRef.current)
-    }
-  }, [syncEditorScene])
-
-  React.useEffect(
-    () => () => {
-      editorRef.current = null
-    },
-    []
-  )
-
-  const store = React.useMemo(
-    () => createTLStore({ bindingUtils: [], shapeUtils: agentShapeUtils }),
-    []
-  )
-
-  return (
-    <div className="absolute inset-0">
-      <Tldraw
-        className="agent-tldraw-surface size-full"
-        hideUi
-        onMount={handleMount}
-        shapeUtils={agentShapeUtils}
-        store={store}
-      >
-        <DiagramMarkerOverlay
-          descriptiveNodes={descriptiveNodes}
-          selectedNodeId={selectedNodeId}
-          setSelectedNodeId={setSelectedNodeId}
-        />
-        <DiagramCameraControls reduceMotion={reduceMotion} />
-      </Tldraw>
-    </div>
-  )
+    draggable: false,
+    selectable: false,
+    focusable: false,
+  }))
 }
+
+function buildFlowEdges(scene: DiagramScene): Edge<AgentEdgeData>[] {
+  return scene.arrows.map((arrow) => ({
+    id: arrow.id,
+    type: "agentEdge",
+    source: arrow.from,
+    target: arrow.to,
+    data: {
+      fromPoint: arrow.fromPoint,
+      toPoint: arrow.toPoint,
+      direction: arrow.direction,
+      dashed: Boolean(arrow.dashed),
+      edgeLabel: arrow.label,
+    },
+    selectable: false,
+    focusable: false,
+  }))
+}
+
+/* ─── Marker overlay (viewport-space buttons pinned to nodes) ─── */
 
 function DiagramMarkerOverlay({
   descriptiveNodes,
@@ -322,43 +90,27 @@ function DiagramMarkerOverlay({
   selectedNodeId: string | null
   setSelectedNodeId: (nodeId: string) => void
 }) {
-  const editor = useEditor()
-  const markerPositions = useValue(
-    "diagram marker positions",
-    () => {
-      editor.getCamera()
-      editor.getViewportScreenBounds()
-
-      return descriptiveNodes.map((node) => ({
-        id: node.id,
-        label: node.label,
-        type: node.type,
-        point: editor.pageToViewport({
-          x: node.x + node.w - 14,
-          y: node.y - 10,
-        }),
-      }))
-    },
-    [descriptiveNodes, editor]
-  )
+  const { x, y, zoom } = useViewport()
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
-      {markerPositions.map((marker) => {
-        const colors = NODE_COLORS[marker.type]
-        const isSelected = selectedNodeId === marker.id
+      {descriptiveNodes.map((node) => {
+        const colors = NODE_COLORS[node.type]
+        const isSelected = selectedNodeId === node.id
+        const posX = (node.x + node.w - 14) * zoom + x
+        const posY = (node.y - 10) * zoom + y
 
         return (
           <button
-            aria-label={`Select ${marker.label.replaceAll("\n", " ")}`}
+            aria-label={`Select ${node.label.replaceAll("\n", " ")}`}
             className="pointer-events-auto absolute flex size-6 items-center justify-center rounded-full border bg-background/95 shadow-sm transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            key={marker.id}
-            onClick={() => setSelectedNodeId(marker.id)}
+            key={node.id}
+            onClick={() => setSelectedNodeId(node.id)}
             style={{
               borderColor: isSelected ? colors.text : colors.border,
               color: colors.text,
-              left: marker.point.x,
-              top: marker.point.y,
+              left: posX,
+              top: posY,
             }}
             type="button"
           >
@@ -373,30 +125,19 @@ function DiagramMarkerOverlay({
   )
 }
 
-function DiagramCameraControls({
-  reduceMotion,
-}: {
-  reduceMotion: boolean | null
-}) {
-  const editor = useEditor()
-  const zoomPercent = useValue(
-    "diagram zoom percent",
-    () => Math.round(editor.getZoomLevel() * 100),
-    [editor]
-  )
+/* ─── Camera controls ─── */
 
-  const animationDuration = reduceMotion ? 0 : 160
+function DiagramCameraControls() {
+  const { zoomIn, zoomOut, fitView, setViewport } = useReactFlow()
+  const { zoom } = useViewport()
+  const zoomPercent = Math.round(zoom * 100)
 
   return (
     <div className="pointer-events-none absolute top-3 right-3 z-20 flex items-center gap-2">
       <Button
         aria-label="Zoom out"
         className="pointer-events-auto"
-        onClick={() =>
-          editor.zoomOut(editor.getViewportScreenCenter(), {
-            animation: { duration: animationDuration },
-          })
-        }
+        onClick={() => zoomOut({ duration: 160 })}
         size="sm"
         type="button"
         variant="outline"
@@ -407,9 +148,7 @@ function DiagramCameraControls({
         aria-label="Reset zoom"
         className="pointer-events-auto min-w-[4.5rem]"
         onClick={() =>
-          editor.resetZoom(editor.getViewportScreenCenter(), {
-            animation: { duration: animationDuration },
-          })
+          setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 160 })
         }
         size="sm"
         type="button"
@@ -420,11 +159,7 @@ function DiagramCameraControls({
       <Button
         aria-label="Zoom in"
         className="pointer-events-auto"
-        onClick={() =>
-          editor.zoomIn(editor.getViewportScreenCenter(), {
-            animation: { duration: animationDuration },
-          })
-        }
+        onClick={() => zoomIn({ duration: 160 })}
         size="sm"
         type="button"
         variant="outline"
@@ -434,11 +169,7 @@ function DiagramCameraControls({
       <Button
         aria-label="Fit diagram"
         className="pointer-events-auto"
-        onClick={() =>
-          editor.zoomToFit({
-            animation: { duration: reduceMotion ? 0 : 180 },
-          })
-        }
+        onClick={() => fitView({ padding: 0.05, duration: 180 })}
         size="sm"
         type="button"
         variant="outline"
@@ -448,6 +179,70 @@ function DiagramCameraControls({
     </div>
   )
 }
+
+/* ─── React Flow surface ─── */
+
+function ReactFlowSurface({
+  descriptiveNodes,
+  resetKey,
+  scene,
+  selectedNodeId,
+  setSelectedNodeId,
+}: {
+  descriptiveNodes: DiagramNodeData[]
+  resetKey: string
+  scene: DiagramScene
+  selectedNodeId: string | null
+  setSelectedNodeId: (nodeId: string) => void
+}) {
+  const flowNodes = React.useMemo(() => buildFlowNodes(scene), [scene])
+  const flowEdges = React.useMemo(() => buildFlowEdges(scene), [scene])
+
+  return (
+    <ReactFlow
+      defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+      edgeTypes={edgeTypes}
+      edges={flowEdges}
+      elementsSelectable={false}
+      key={resetKey}
+      nodeTypes={nodeTypes}
+      nodes={flowNodes}
+      nodesConnectable={false}
+      nodesDraggable={false}
+      panOnDrag
+      panOnScroll
+      preventScrolling
+      proOptions={{ hideAttribution: true }}
+      zoomOnPinch
+      zoomOnScroll
+    >
+      {/* Shared arrow marker definition for all custom edges */}
+      <svg className="absolute size-0">
+        <defs>
+          <marker
+            id="diagram-arrow-marker"
+            markerHeight="8"
+            markerUnits="userSpaceOnUse"
+            markerWidth="8"
+            orient="auto"
+            refX="7"
+            refY="3"
+          >
+            <path d="M 0 0 L 8 3 L 0 6 z" fill="var(--diagram-arrow)" />
+          </marker>
+        </defs>
+      </svg>
+      <DiagramMarkerOverlay
+        descriptiveNodes={descriptiveNodes}
+        selectedNodeId={selectedNodeId}
+        setSelectedNodeId={setSelectedNodeId}
+      />
+      <DiagramCameraControls />
+    </ReactFlow>
+  )
+}
+
+/* ─── Public component ─── */
 
 export function DiagramCanvas({
   diagram,
@@ -461,7 +256,6 @@ export function DiagramCanvas({
     () => getDescriptiveNodes(scene),
     [scene]
   )
-  const shapeRecords = React.useMemo(() => buildCanvasShapes(scene), [scene])
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(
     null
   )
@@ -471,50 +265,22 @@ export function DiagramCanvas({
     () => scene.nodes.find((node) => node.id === selectedNodeId) ?? null,
     [scene.nodes, selectedNodeId]
   )
-  const selectedNodeContext = React.useMemo(() => {
-    if (!selectedNode) {
-      return null
-    }
-
-    const nodeLabelMap = new Map(
-      scene.nodes.map((node) => [node.id, node.label.replaceAll("\n", " ")])
-    )
-
-    return {
-      band: selectedNode.band,
-      incoming: scene.arrows
-        .filter((arrow) => arrow.to === selectedNode.id)
-        .map((arrow) => ({
-          dashed: Boolean(arrow.dashed),
-          label: nodeLabelMap.get(arrow.from) ?? arrow.from,
-        })),
-      outgoing: scene.arrows
-        .filter((arrow) => arrow.from === selectedNode.id)
-        .map((arrow) => ({
-          dashed: Boolean(arrow.dashed),
-          label: nodeLabelMap.get(arrow.to) ?? arrow.to,
-        })),
-      patternTitle: scene.title,
-      stage: scene.stage,
-    }
-  }, [scene.arrows, scene.nodes, scene.stage, scene.title, selectedNode])
+  const selectedNodeContext = React.useMemo(
+    () =>
+      selectedNodeId ? buildNodeDetailContext(scene, selectedNodeId) : null,
+    [scene, selectedNodeId]
+  )
 
   React.useEffect(() => {
     setSelectedNodeId(null)
   }, [diagram.id])
 
   React.useEffect(() => {
-    if (!selectedNodeId) {
-      return
-    }
-
+    if (!selectedNodeId) return
     if (!scene.nodes.some((node) => node.id === selectedNodeId)) {
       setSelectedNodeId(null)
     }
   }, [scene.nodes, selectedNodeId])
-
-  const useStaticSurface =
-    typeof navigator !== "undefined" && /jsdom/i.test(navigator.userAgent)
 
   return (
     <div className="flex flex-col gap-4">
@@ -530,23 +296,13 @@ export function DiagramCanvas({
                   width: scene.width,
                 }}
               >
-                {useStaticSurface ? (
-                  <>
-                    <StaticDiagramSurface scene={scene} />
-                    <StaticDiagramMarkerOverlay
-                      descriptiveNodes={descriptiveNodes}
-                      selectedNodeId={selectedNodeId}
-                      setSelectedNodeId={setSelectedNodeId}
-                    />
-                  </>
-                ) : (
-                  <ReadOnlyTldrawSurface
-                    descriptiveNodes={descriptiveNodes}
-                    selectedNodeId={selectedNodeId}
-                    setSelectedNodeId={setSelectedNodeId}
-                    shapeRecords={shapeRecords}
-                  />
-                )}
+                <ReactFlowSurface
+                  descriptiveNodes={descriptiveNodes}
+                  resetKey={diagram.id}
+                  scene={scene}
+                  selectedNodeId={selectedNodeId}
+                  setSelectedNodeId={setSelectedNodeId}
+                />
               </div>
             </div>
           </div>

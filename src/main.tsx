@@ -1,6 +1,6 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import "tldraw/tldraw.css"
+import "@xyflow/react/dist/base.css"
 
 import { ThemeProvider } from "@/components/theme-provider"
 import "./index.css"

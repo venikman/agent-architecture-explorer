@@ -4,12 +4,7 @@ import react from "@vitejs/plugin-react"
 import { defineConfig, loadEnv } from "vite"
 
 function resolveBase(env: Record<string, string>) {
-  if (env.VITE_PUBLIC_BASE) {
-    return env.VITE_PUBLIC_BASE
-  }
-
-  const repository = env.GITHUB_REPOSITORY?.split("/")[1]
-  return repository ? `/${repository}/` : "/"
+  return env.VITE_PUBLIC_BASE || "/"
 }
 
 export default defineConfig(({ mode }) => {
@@ -35,11 +30,8 @@ export default defineConfig(({ mode }) => {
               return "primitives"
             }
 
-            if (
-              id.includes("node_modules/tldraw") ||
-              id.includes("node_modules/@tldraw")
-            ) {
-              return "tldraw"
+            if (id.includes("node_modules/@xyflow")) {
+              return "xyflow"
             }
 
             return undefined

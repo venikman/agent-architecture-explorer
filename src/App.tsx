@@ -10,7 +10,6 @@ import {
   diagramSections,
   diagrams,
   getDiagramById,
-  resolveDiagramId,
   type DiagramId,
   type HealthcareStage,
 } from "@/data/diagrams"
@@ -40,12 +39,6 @@ const STAGE_EXPLAINERS: Record<Exclude<HealthcareStage, "off">, string> = {
     "Adds sandboxing, emergency halt controls, periodic human checkpoints, and incident / rollback controls.",
 }
 
-interface AppProps {
-  initialActiveView?: string
-  initialHealthcareMode?: boolean
-  initialHealthcareStage?: HealthcareStage
-}
-
 interface SidebarContentProps {
   activeView: DiagramId
   healthcareStage: HealthcareStage
@@ -55,15 +48,42 @@ interface SidebarContentProps {
   toggleHealthcare: () => void
 }
 
-function resolveInitialHealthcareStage({
-  initialHealthcareMode,
-  initialHealthcareStage,
-}: Pick<AppProps, "initialHealthcareMode" | "initialHealthcareStage">) {
-  if (initialHealthcareStage && initialHealthcareStage !== "off") {
-    return initialHealthcareStage
-  }
+const navigationSections = diagramSections.map((section) => ({
+  ...section,
+  diagrams: diagrams.filter((diagram) => diagram.category === section.category),
+}))
 
-  return initialHealthcareMode ? "regulated" : "off"
+function useHealthcareStage() {
+  const [healthcareStage, setHealthcareStageState] =
+    React.useState<HealthcareStage>("off")
+  const [lastHealthcareStage, setLastHealthcareStage] = React.useState<
+    Exclude<HealthcareStage, "off">
+  >("regulated")
+
+  const setHealthcareStage = React.useCallback((nextStage: HealthcareStage) => {
+    if (nextStage !== "off") {
+      setLastHealthcareStage(nextStage)
+    }
+
+    setHealthcareStageState(nextStage)
+  }, [])
+
+  const toggleHealthcare = React.useCallback(() => {
+    setHealthcareStageState((currentStage) => {
+      if (currentStage === "off") {
+        return lastHealthcareStage
+      }
+
+      setLastHealthcareStage(currentStage)
+      return "off"
+    })
+  }, [lastHealthcareStage])
+
+  return {
+    healthcareStage,
+    setHealthcareStage,
+    toggleHealthcare,
+  }
 }
 
 function LegendSwatch({
@@ -115,16 +135,12 @@ function SidebarContent({
       <Separator />
 
       <nav className="flex flex-1 flex-col gap-4 overflow-y-auto">
-        {diagramSections.map((section) => {
-          const sectionDiagrams = diagrams.filter(
-            (diagram) => diagram.category === section.category
-          )
-
+        {navigationSections.map((section) => {
           return (
             <div className="flex flex-col gap-2" key={section.category}>
               <p className="ui-kicker">{section.label}</p>
               <div className="flex flex-col gap-1">
-                {sectionDiagrams.map((diagram) => {
+                {section.diagrams.map((diagram) => {
                   const isActive = diagram.id === activeView
 
                   return (
@@ -243,54 +259,16 @@ function SidebarContent({
   )
 }
 
-export function App({
-  initialActiveView = DEFAULT_DIAGRAM_ID,
-  initialHealthcareMode = false,
-  initialHealthcareStage,
-}: AppProps) {
-  const [activeView, setActiveView] = React.useState<DiagramId>(() =>
-    resolveDiagramId(initialActiveView)
+export function App() {
+  const [activeView, setActiveView] = React.useState<DiagramId>(
+    DEFAULT_DIAGRAM_ID
   )
-  const [healthcareStage, setHealthcareStageState] =
-    React.useState<HealthcareStage>(() =>
-      resolveInitialHealthcareStage({
-        initialHealthcareMode,
-        initialHealthcareStage,
-      })
-    )
-  const [lastHealthcareStage, setLastHealthcareStage] = React.useState<
-    Exclude<HealthcareStage, "off">
-  >(() => {
-    const initialStage = resolveInitialHealthcareStage({
-      initialHealthcareMode,
-      initialHealthcareStage,
-    })
-
-    return initialStage === "off" ? "regulated" : initialStage
-  })
+  const { healthcareStage, setHealthcareStage, toggleHealthcare } =
+    useHealthcareStage()
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false)
 
   const healthcareActive = healthcareStage !== "off"
   const diagram = React.useMemo(() => getDiagramById(activeView), [activeView])
-
-  const setHealthcareStage = React.useCallback((nextStage: HealthcareStage) => {
-    if (nextStage !== "off") {
-      setLastHealthcareStage(nextStage)
-    }
-
-    setHealthcareStageState(nextStage)
-  }, [])
-
-  const toggleHealthcare = React.useCallback(() => {
-    setHealthcareStageState((currentStage) => {
-      if (currentStage === "off") {
-        return lastHealthcareStage
-      }
-
-      setLastHealthcareStage(currentStage)
-      return "off"
-    })
-  }, [lastHealthcareStage])
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -357,7 +335,6 @@ export function App({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">Read-only tldraw surface</Badge>
                 <Badge variant="outline">Open nodes with detail markers</Badge>
                 {healthcareActive ? (
                   <Badge variant="destructive">
