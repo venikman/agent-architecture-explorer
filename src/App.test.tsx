@@ -44,7 +44,9 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: /high-risk autonomy/i })
     ).toHaveAttribute("aria-pressed", "true")
-    expect(screen.getByText(/kill switch/i)).toBeInTheDocument()
+    expect(
+      screen.getAllByText(/incident \/ rollback controls/i).length
+    ).toBeGreaterThan(0)
   })
 
   it("opens the detail sheet from the read-only diagram interaction layer", async () => {
