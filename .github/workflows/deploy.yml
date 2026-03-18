@@ -22,6 +22,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run build
+        env:
+          VITE_PUBLIC_BASE: /agent-architecture-explorer/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
