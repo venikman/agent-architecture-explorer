@@ -1,198 +1,393 @@
-import { motion } from 'motion/react';
-import { DiagramCanvas } from '@/components/diagrams/DiagramCanvas';
-import { diagrams, NODE_COLORS } from '@/data/diagrams';
-import { useAppStore } from '@/stores/appStore';
+import * as React from "react"
+import { Menu01Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 
-const sectionMap = [
-  { label: 'Workflow Patterns', ids: ['augmented-llm', 'prompt-chaining', 'routing', 'parallelization', 'orchestrator', 'evaluator'] },
-  { label: 'Agent Patterns', ids: ['autonomous'] },
-];
+import {
+  DEFAULT_DIAGRAM_ID,
+  HEALTHCARE_ACTIVE_STAGES,
+  HEALTHCARE_STAGE_LABELS,
+  NODE_COLORS,
+  diagramSections,
+  diagrams,
+  getDiagramById,
+  resolveDiagramId,
+  type DiagramId,
+  type HealthcareStage,
+} from "@/data/diagrams"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 
-function Sidebar() {
-  const { activeView, setActiveView, healthcareMode, toggleHealthcare } = useAppStore();
+const LazyDiagramCanvas = React.lazy(async () => {
+  const module = await import("@/components/diagrams/DiagramCanvas")
+  return { default: module.DiagramCanvas }
+})
+
+const STAGE_EXPLAINERS: Record<Exclude<HealthcareStage, "off">, string> = {
+  foundational:
+    "Adds PHI minimization, audit trail coverage, minimum-necessary access, and source visibility.",
+  regulated:
+    "Adds policy gates, clinician approval, guideline grounding, and disclosure controls.",
+  highRisk:
+    "Adds sandboxing, emergency halt controls, periodic human checkpoints, and incident / rollback controls.",
+}
+
+interface AppProps {
+  initialActiveView?: string
+  initialHealthcareMode?: boolean
+  initialHealthcareStage?: HealthcareStage
+}
+
+interface SidebarContentProps {
+  activeView: DiagramId
+  healthcareStage: HealthcareStage
+  onNavigate?: () => void
+  setActiveView: (value: DiagramId) => void
+  setHealthcareStage: (value: HealthcareStage) => void
+  toggleHealthcare: () => void
+}
+
+function resolveInitialHealthcareStage({
+  initialHealthcareMode,
+  initialHealthcareStage,
+}: Pick<AppProps, "initialHealthcareMode" | "initialHealthcareStage">) {
+  if (initialHealthcareStage && initialHealthcareStage !== "off") {
+    return initialHealthcareStage
+  }
+
+  return initialHealthcareMode ? "regulated" : "off"
+}
+
+function LegendSwatch({
+  label,
+  type,
+}: {
+  label: string
+  type: keyof typeof NODE_COLORS
+}) {
+  const isPill = type === "io"
 
   return (
-    <aside className="w-64 border-r border-border bg-card flex flex-col h-screen flex-shrink-0">
-      {/* Header */}
-      <div className="px-5 py-5 border-b border-border">
-        <h1 className="text-sm font-semibold tracking-tight">Agent Architecture</h1>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Interactive Pattern Explorer</p>
+    <div className="ui-legend-row">
+      <div
+        className={
+          isPill
+            ? "h-3 w-4 rounded-full border"
+            : "h-3 w-4 rounded-[2px] border"
+        }
+        style={{
+          background: NODE_COLORS[type].fill,
+          borderColor: NODE_COLORS[type].border,
+        }}
+      />
+      <span className="ui-copy-sm">{label}</span>
+    </div>
+  )
+}
+
+function SidebarContent({
+  activeView,
+  healthcareStage,
+  onNavigate,
+  setActiveView,
+  setHealthcareStage,
+  toggleHealthcare,
+}: SidebarContentProps) {
+  const healthcareActive = healthcareStage !== "off"
+
+  return (
+    <div className="flex h-full flex-col gap-4 px-4 py-5">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-base font-semibold tracking-tight">
+          Agent Architecture
+        </h1>
+        <p className="ui-copy-sm">Interactive Pattern Explorer</p>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3">
-        {sectionMap.map((section) => (
-          <div key={section.label} className="mb-4">
-            <div className="px-5 mb-1.5">
-              <span className="text-[10px] font-mono font-semibold tracking-[0.1em] uppercase text-muted-foreground">
-                {section.label}
-              </span>
+      <Separator />
+
+      <nav className="flex flex-1 flex-col gap-4 overflow-y-auto">
+        {diagramSections.map((section) => {
+          const sectionDiagrams = diagrams.filter(
+            (diagram) => diagram.category === section.category
+          )
+
+          return (
+            <div className="flex flex-col gap-2" key={section.category}>
+              <p className="ui-kicker">{section.label}</p>
+              <div className="flex flex-col gap-1">
+                {sectionDiagrams.map((diagram) => {
+                  const isActive = diagram.id === activeView
+
+                  return (
+                    <Button
+                      aria-current={isActive ? "page" : undefined}
+                      className="h-auto justify-start px-3 py-2 text-left"
+                      key={diagram.id}
+                      onClick={() => {
+                        setActiveView(diagram.id)
+                        onNavigate?.()
+                      }}
+                      variant={isActive ? "secondary" : "ghost"}
+                    >
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{
+                          background: isActive
+                            ? NODE_COLORS.llm.text
+                            : "var(--diagram-dot-muted)",
+                        }}
+                      />
+                      <span className="truncate">{diagram.title}</span>
+                    </Button>
+                  )
+                })}
+              </div>
             </div>
-            {section.ids.map((id) => {
-              const d = diagrams.find(d => d.id === id);
-              if (!d) return null;
-              const isActive = activeView === id;
-              const isHealthcare = id === 'healthcare';
-              return (
-                <button
-                  key={id}
-                  onClick={() => setActiveView(id)}
-                  className={`w-full text-left px-5 py-2 text-[13px] transition-all duration-150 cursor-pointer flex items-center gap-2.5 ${
-                    isActive
-                      ? 'bg-primary/10 text-primary font-medium border-r-2 border-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  <div
-                    className="w-1.5 h-1.5 flex-shrink-0"
-                    style={{
-                      background: isHealthcare
-                        ? NODE_COLORS.danger.text
-                        : isActive ? NODE_COLORS.llm.text : '#d1d5db',
-                    }}
-                  />
-                  {d.title}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+          )
+        })}
       </nav>
 
-      {/* Healthcare toggle */}
-      <div className="px-5 py-3 border-t border-border">
-        <button
+      <Separator />
+
+      <div className="flex flex-col gap-3">
+        <Button
+          className="h-auto justify-between px-3 py-3"
           onClick={toggleHealthcare}
-          className={`w-full flex items-center justify-between px-3 py-2.5 text-[12px] font-medium transition-all duration-150 cursor-pointer border ${
-            healthcareMode
-              ? 'bg-destructive/10 border-destructive/30 text-destructive'
-              : 'border-border text-muted-foreground hover:text-foreground hover:border-border'
-          }`}
+          variant={healthcareActive ? "destructive" : "outline"}
         >
-          <span className="flex items-center gap-2">
-            <span>{healthcareMode ? '🏥' : '⚙️'}</span>
-            Healthcare Mode
-          </span>
-          <span className={`text-[10px] font-mono px-1.5 py-0.5 ${
-            healthcareMode ? 'bg-destructive/20 text-destructive' : 'bg-muted text-muted-foreground'
-          }`}>
-            {healthcareMode ? 'ON' : 'OFF'}
-          </span>
-        </button>
-        {healthcareMode && (
-          <motion.p
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="text-[10px] text-destructive/70 mt-2 leading-relaxed"
-          >
-            Red nodes show non-negotiable components required for healthcare deployment.
-          </motion.p>
+          <span>Healthcare Mode</span>
+          <Badge variant={healthcareActive ? "destructive" : "outline"}>
+            {healthcareActive ? "On" : "Off"}
+          </Badge>
+        </Button>
+
+        {healthcareActive ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-2">
+              {HEALTHCARE_ACTIVE_STAGES.map((stage) => {
+                const isActive = healthcareStage === stage
+
+                return (
+                  <Button
+                    aria-pressed={isActive}
+                    className="h-auto px-3 py-2"
+                    key={stage}
+                    onClick={() => setHealthcareStage(stage)}
+                    size="sm"
+                    variant={isActive ? "secondary" : "outline"}
+                  >
+                    {HEALTHCARE_STAGE_LABELS[stage]}
+                  </Button>
+                )
+              })}
+            </div>
+            <p className="ui-copy-sm">{STAGE_EXPLAINERS[healthcareStage]}</p>
+          </div>
+        ) : (
+          <p className="ui-copy-sm">
+            Enable this to reveal the staged healthcare controls required for
+            safe deployment.
+          </p>
         )}
       </div>
 
-      {/* Legend */}
-      <div className="px-5 py-4 border-t border-border">
-        <div className="text-[10px] font-mono font-semibold tracking-[0.1em] uppercase text-muted-foreground mb-2.5">
-          Legend
-        </div>
-        <div className="space-y-1.5">
-          {([
-            ['LLM', 'llm'],
-            ['I/O & Human', 'io'],
-            ['Tool / Utility', 'tool'],
-            ['Non-Negotiable', 'danger'],
-          ] as const).map(([label, type]) => (
-            <div key={type} className="flex items-center gap-2">
-              <div
-                className="w-4 h-3 border"
-                style={{
-                  background: NODE_COLORS[type].fill,
-                  borderColor: NODE_COLORS[type].border,
-                  borderRadius: type === 'io' ? '6px' : 0,
-                }}
+      <Card size="sm">
+        <CardHeader className="gap-1">
+          <CardTitle>Legend</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <LegendSwatch label="LLM" type="llm" />
+          <LegendSwatch label="I/O & Human" type="io" />
+          <LegendSwatch label="Tool / Utility" type="tool" />
+          <LegendSwatch label="Healthcare control" type="danger" />
+          <Separator />
+          <div className="flex items-center gap-2">
+            <svg aria-hidden="true" className="shrink-0" height="2" width="16">
+              <line
+                stroke="var(--diagram-arrow)"
+                strokeWidth="1.5"
+                x1="0"
+                x2="16"
+                y1="1"
+                y2="1"
               />
-              <span className="text-[11px] text-muted-foreground">{label}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border">
-            <svg width="16" height="2"><line x1="0" y1="1" x2="16" y2="1" stroke="#9E9E9E" strokeWidth="1.5" /></svg>
-            <span className="text-[11px] text-muted-foreground">Definite flow</span>
+            </svg>
+            <span className="ui-copy-sm">Definite flow</span>
           </div>
           <div className="flex items-center gap-2">
-            <svg width="16" height="2"><line x1="0" y1="1" x2="16" y2="1" stroke="#9E9E9E" strokeWidth="1.5" strokeDasharray="4 3" /></svg>
-            <span className="text-[11px] text-muted-foreground">Conditional</span>
+            <svg aria-hidden="true" className="shrink-0" height="2" width="16">
+              <line
+                stroke="var(--diagram-arrow)"
+                strokeDasharray="4 3"
+                strokeWidth="1.5"
+                x1="0"
+                x2="16"
+                y1="1"
+                y2="1"
+              />
+            </svg>
+            <span className="ui-copy-sm">Conditional</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+export function App({
+  initialActiveView = DEFAULT_DIAGRAM_ID,
+  initialHealthcareMode = false,
+  initialHealthcareStage,
+}: AppProps) {
+  const [activeView, setActiveView] = React.useState<DiagramId>(() =>
+    resolveDiagramId(initialActiveView)
+  )
+  const [healthcareStage, setHealthcareStageState] =
+    React.useState<HealthcareStage>(() =>
+      resolveInitialHealthcareStage({
+        initialHealthcareMode,
+        initialHealthcareStage,
+      })
+    )
+  const [lastHealthcareStage, setLastHealthcareStage] = React.useState<
+    Exclude<HealthcareStage, "off">
+  >(() => {
+    const initialStage = resolveInitialHealthcareStage({
+      initialHealthcareMode,
+      initialHealthcareStage,
+    })
+
+    return initialStage === "off" ? "regulated" : initialStage
+  })
+  const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false)
+
+  const healthcareActive = healthcareStage !== "off"
+  const diagram = React.useMemo(() => getDiagramById(activeView), [activeView])
+
+  const setHealthcareStage = React.useCallback((nextStage: HealthcareStage) => {
+    if (nextStage !== "off") {
+      setLastHealthcareStage(nextStage)
+    }
+
+    setHealthcareStageState(nextStage)
+  }, [])
+
+  const toggleHealthcare = React.useCallback(() => {
+    setHealthcareStageState((currentStage) => {
+      if (currentStage === "off") {
+        return lastHealthcareStage
+      }
+
+      setLastHealthcareStage(currentStage)
+      return "off"
+    })
+  }, [lastHealthcareStage])
+
+  return (
+    <div className="min-h-dvh bg-background text-foreground">
+      <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+        <div className="sticky top-0 border-b bg-background/95 backdrop-blur lg:hidden">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <SheetTrigger render={<Button size="sm" variant="outline" />}>
+              <HugeiconsIcon data-icon="inline-start" icon={Menu01Icon} />
+              Browse Patterns
+            </SheetTrigger>
+
+            {healthcareActive ? (
+              <Badge variant="destructive">
+                {HEALTHCARE_STAGE_LABELS[healthcareStage]}
+              </Badge>
+            ) : null}
           </div>
         </div>
-      </div>
-    </aside>
-  );
-}
 
-function MainCanvas() {
-  const { activeView, healthcareMode } = useAppStore();
-  const diagram = diagrams.find(d => d.id === activeView);
-  if (!diagram) return null;
-
-  return (
-    <main className="flex-1 flex flex-col h-screen bg-background overflow-hidden">
-      {/* Title bar */}
-      <div className="px-8 py-5 border-b border-border flex items-center justify-between">
-        <div key={diagram.id}>
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-          >
-            <div className="flex items-center gap-2.5 mb-1">
-              <div
-                className="w-[3px] h-4"
-                style={{
-                  background: diagram.id === 'healthcare' ? NODE_COLORS.danger.text : NODE_COLORS.llm.text,
-                }}
-              />
-              <h2 className="text-lg font-semibold tracking-tight">{diagram.title}</h2>
-            </div>
-            <p className="text-[13px] text-muted-foreground ml-[15px]">{diagram.subtitle}</p>
-          </motion.div>
-        </div>
-        <div className="flex items-center gap-3">
-          {healthcareMode && (
-            <motion.span
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-[10px] font-mono font-medium px-2 py-1 bg-destructive/10 text-destructive border border-destructive/20"
-            >
-              🏥 Healthcare constraints active
-            </motion.span>
-          )}
-          <span className="text-[10px] font-mono text-muted-foreground">
-            Click any node for details
-          </span>
-        </div>
-      </div>
-
-      {/* Diagram area */}
-      <div className="flex-1 p-8 flex items-center justify-center" key={`${diagram.id}-${healthcareMode}`}>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          className="w-full h-full relative"
+        <SheetContent
+          aria-label="Pattern Navigation"
+          className="w-full max-w-[22rem] border-r p-0"
+          side="left"
         >
-          <DiagramCanvas diagram={diagram} healthcareMode={healthcareMode} />
-        </motion.div>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Pattern Navigation</SheetTitle>
+          </SheetHeader>
+          <SidebarContent
+            activeView={activeView}
+            healthcareStage={healthcareStage}
+            onNavigate={() => setIsMobileNavOpen(false)}
+            setActiveView={setActiveView}
+            setHealthcareStage={setHealthcareStage}
+            toggleHealthcare={toggleHealthcare}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <div className="lg:grid lg:min-h-dvh lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <aside className="hidden border-r bg-card/30 lg:flex lg:min-h-dvh lg:flex-col">
+          <SidebarContent
+            activeView={activeView}
+            healthcareStage={healthcareStage}
+            setActiveView={setActiveView}
+            setHealthcareStage={setHealthcareStage}
+            toggleHealthcare={toggleHealthcare}
+          />
+        </aside>
+
+        <main className="min-w-0">
+          <div className="flex flex-col gap-3 border-b px-4 py-4 sm:px-6 sm:py-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="h-5 w-1 rounded-full"
+                    style={{ background: NODE_COLORS.llm.text }}
+                  />
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    {diagram.title}
+                  </h2>
+                </div>
+                <p className="ui-copy-base">{diagram.subtitle}</p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">Read-only tldraw surface</Badge>
+                <Badge variant="outline">Open nodes with detail markers</Badge>
+                {healthcareActive ? (
+                  <Badge variant="destructive">
+                    {HEALTHCARE_STAGE_LABELS[healthcareStage]}
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6">
+            <React.Suspense
+              fallback={
+                <Card className="border border-border/70 bg-card/40">
+                  <CardContent className="ui-detail-copy py-6">
+                    Loading interactive diagram surface…
+                  </CardContent>
+                </Card>
+              }
+            >
+              <LazyDiagramCanvas
+                diagram={diagram}
+                healthcareStage={healthcareStage}
+              />
+            </React.Suspense>
+          </div>
+        </main>
       </div>
-    </main>
-  );
-}
-
-export function App() {
-  return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <MainCanvas />
     </div>
-  );
+  )
 }
 
-export default App;
+export default App

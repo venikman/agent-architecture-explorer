@@ -1,27 +1,15 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
-type Theme = "dark" | "light" | "system"
+import {
+  ThemeProviderContext,
+  type Theme,
+  type ThemeProviderProps,
+} from "@/components/theme-context"
+
 type ResolvedTheme = "dark" | "light"
-
-type ThemeProviderProps = {
-  children: React.ReactNode
-  defaultTheme?: Theme
-  storageKey?: string
-  disableTransitionOnChange?: boolean
-}
-
-type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-}
 
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
 const THEME_VALUES: Theme[] = ["dark", "light", "system"]
-
-const ThemeProviderContext = React.createContext<
-  ThemeProviderState | undefined
->(undefined)
 
 function isTheme(value: string | null): value is Theme {
   if (value === null) {
@@ -67,14 +55,9 @@ function isEditableTarget(target: EventTarget | null) {
     return true
   }
 
-  const editableParent = target.closest(
-    "input, textarea, select, [contenteditable='true']"
+  return Boolean(
+    target.closest("input, textarea, select, [contenteditable='true']")
   )
-  if (editableParent) {
-    return true
-  }
-
-  return false
 }
 
 export function ThemeProvider({
@@ -93,14 +76,6 @@ export function ThemeProvider({
     return defaultTheme
   })
 
-  const setTheme = React.useCallback(
-    (nextTheme: Theme) => {
-      localStorage.setItem(storageKey, nextTheme)
-      setThemeState(nextTheme)
-    },
-    [storageKey]
-  )
-
   const applyTheme = React.useCallback(
     (nextTheme: Theme) => {
       const root = document.documentElement
@@ -113,11 +88,18 @@ export function ThemeProvider({
       root.classList.remove("light", "dark")
       root.classList.add(resolvedTheme)
 
-      if (restoreTransitions) {
-        restoreTransitions()
-      }
+      restoreTransitions?.()
     },
     [disableTransitionOnChange]
+  )
+
+  const setTheme = React.useCallback(
+    (nextTheme: Theme) => {
+      localStorage.setItem(storageKey, nextTheme)
+      setThemeState(nextTheme)
+      applyTheme(nextTheme)
+    },
+    [applyTheme, storageKey]
   )
 
   React.useEffect(() => {
@@ -141,19 +123,11 @@ export function ThemeProvider({
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) {
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
         return
       }
 
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return
-      }
-
-      if (isEditableTarget(event.target)) {
-        return
-      }
-
-      if (event.key.toLowerCase() !== "d") {
+      if (isEditableTarget(event.target) || event.key.toLowerCase() !== "d") {
         return
       }
 
@@ -181,11 +155,7 @@ export function ThemeProvider({
 
   React.useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.storageArea !== localStorage) {
-        return
-      }
-
-      if (event.key !== storageKey) {
+      if (event.storageArea !== localStorage || event.key !== storageKey) {
         return
       }
 
@@ -217,14 +187,4 @@ export function ThemeProvider({
       {children}
     </ThemeProviderContext.Provider>
   )
-}
-
-export const useTheme = () => {
-  const context = React.useContext(ThemeProviderContext)
-
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider")
-  }
-
-  return context
 }
