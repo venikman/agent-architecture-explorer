@@ -1,21 +1,22 @@
-# React + TypeScript + Vite + shadcn/ui
+# Bun + React + TypeScript + Vite
 
-This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
+This repo is a Bun-first Vite app with React, TypeScript, Tailwind CSS, and the existing UI component source kept in-repo.
 
-## Adding components
-
-To add components to your app, run the following command:
+## Development
 
 ```bash
-npx shadcn@latest add button
+bun install
+bun run dev
 ```
 
-This will place the ui components in the `src/components` directory.
+## Build
 
-## Using components
+```bash
+bun run build
+```
 
-To use the components in your app, import them as follows:
+## Preview Production Output
 
-```tsx
-import { Button } from "@/components/ui/button"
+```bash
+bun run preview
 ```

@@ -1,8 +1,9 @@
 import {
   HEALTHCARE_STAGE_LABELS,
   NODE_COLORS,
+  type DiagramConnection,
+  type DiagramNodeDetailContext,
   type DiagramNode,
-  type HealthcareStage,
   type NodeType,
 } from "@/data/diagrams"
 import { Badge } from "@/components/ui/badge"
@@ -30,22 +31,9 @@ const NODE_TYPE_LABELS: Record<NodeType, string> = {
 }
 
 interface DiagramDetailSheetProps {
-  context: DiagramDetailContext | null
+  context: DiagramNodeDetailContext | null
   node: DiagramNode | null
   onOpenChange: (open: boolean) => void
-}
-
-interface DiagramConnection {
-  dashed: boolean
-  label: string
-}
-
-interface DiagramDetailContext {
-  band: DiagramNode["band"]
-  incoming: DiagramConnection[]
-  outgoing: DiagramConnection[]
-  patternTitle: string
-  stage: HealthcareStage
 }
 
 const NODE_BAND_LABELS: Record<DiagramNode["band"], string> = {
@@ -95,19 +83,22 @@ function formatConnectionSummary(
   return connections.map((connection) => connection.label).join(" · ")
 }
 
-function buildRoleSummary(node: DiagramNode, context: DiagramDetailContext) {
-  const primaryInputs = context.incoming
-    .filter((connection) => !connection.dashed)
-    .map((connection) => connection.label)
-  const optionalInputs = context.incoming
-    .filter((connection) => connection.dashed)
-    .map((connection) => connection.label)
-  const primaryOutputs = context.outgoing
-    .filter((connection) => !connection.dashed)
-    .map((connection) => connection.label)
-  const optionalOutputs = context.outgoing
-    .filter((connection) => connection.dashed)
-    .map((connection) => connection.label)
+function buildRoleSummary(
+  node: DiagramNode,
+  context: DiagramNodeDetailContext
+) {
+  const primaryInputs = context.incoming.primary.map(
+    (connection) => connection.label
+  )
+  const optionalInputs = context.incoming.conditional.map(
+    (connection) => connection.label
+  )
+  const primaryOutputs = context.outgoing.primary.map(
+    (connection) => connection.label
+  )
+  const optionalOutputs = context.outgoing.conditional.map(
+    (connection) => connection.label
+  )
 
   const sentences = [
     `${normalizeLabel(node.label)} sits in the ${NODE_BAND_LABELS[context.band].toLowerCase()} of ${context.patternTitle}.`,
@@ -140,21 +131,21 @@ function buildRoleSummary(node: DiagramNode, context: DiagramDetailContext) {
 
 function buildFunctionalSketch(
   node: DiagramNode,
-  context: DiagramDetailContext
+  context: DiagramNodeDetailContext
 ) {
   const identifier = toFsIdentifier(node.label)
-  const primaryInputs = context.incoming
-    .filter((connection) => !connection.dashed)
-    .map((connection) => connection.label)
-  const optionalInputs = context.incoming
-    .filter((connection) => connection.dashed)
-    .map((connection) => connection.label)
-  const primaryOutputs = context.outgoing
-    .filter((connection) => !connection.dashed)
-    .map((connection) => connection.label)
-  const optionalOutputs = context.outgoing
-    .filter((connection) => connection.dashed)
-    .map((connection) => connection.label)
+  const primaryInputs = context.incoming.primary.map(
+    (connection) => connection.label
+  )
+  const optionalInputs = context.incoming.conditional.map(
+    (connection) => connection.label
+  )
+  const primaryOutputs = context.outgoing.primary.map(
+    (connection) => connection.label
+  )
+  const optionalOutputs = context.outgoing.conditional.map(
+    (connection) => connection.label
+  )
 
   const lines = [`let ${identifier} payload =`, "    payload"]
 
@@ -172,7 +163,8 @@ function buildFunctionalSketch(
       break
     case "io":
       lines.push(
-        context.incoming.length === 0
+        context.incoming.primary.length + context.incoming.conditional.length ===
+          0
           ? `    |> captureInput "${normalizeLabel(node.label)}"`
           : `    |> presentToOperator "${normalizeLabel(node.label)}"`
       )
@@ -211,18 +203,10 @@ export function DiagramDetailSheet({
   const roleSummary = buildRoleSummary(node, context)
   const functionalSketch = buildFunctionalSketch(node, context)
   const stageLabel = HEALTHCARE_STAGE_LABELS[context.stage]
-  const incomingPrimary = context.incoming.filter(
-    (connection) => !connection.dashed
-  )
-  const incomingConditional = context.incoming.filter(
-    (connection) => connection.dashed
-  )
-  const outgoingPrimary = context.outgoing.filter(
-    (connection) => !connection.dashed
-  )
-  const outgoingConditional = context.outgoing.filter(
-    (connection) => connection.dashed
-  )
+  const incomingPrimary = context.incoming.primary
+  const incomingConditional = context.incoming.conditional
+  const outgoingPrimary = context.outgoing.primary
+  const outgoingConditional = context.outgoing.conditional
 
   return (
     <Sheet modal={isMobile} open={Boolean(node)} onOpenChange={onOpenChange}>

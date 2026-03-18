@@ -1,10 +1,13 @@
 import * as React from "react"
 
-import {
-  ThemeProviderContext,
-  type Theme,
-  type ThemeProviderProps,
-} from "@/components/theme-context"
+type Theme = "dark" | "light" | "system"
+
+type ThemeProviderProps = {
+  children: React.ReactNode
+  defaultTheme?: Theme
+  storageKey?: string
+  disableTransitionOnChange?: boolean
+}
 
 type ResolvedTheme = "dark" | "light"
 
@@ -65,7 +68,6 @@ export function ThemeProvider({
   defaultTheme = "system",
   storageKey = "theme",
   disableTransitionOnChange = true,
-  ...props
 }: ThemeProviderProps) {
   const [theme, setThemeState] = React.useState<Theme>(() => {
     const storedTheme = localStorage.getItem(storageKey)
@@ -91,15 +93,6 @@ export function ThemeProvider({
       restoreTransitions?.()
     },
     [disableTransitionOnChange]
-  )
-
-  const setTheme = React.useCallback(
-    (nextTheme: Theme) => {
-      localStorage.setItem(storageKey, nextTheme)
-      setThemeState(nextTheme)
-      applyTheme(nextTheme)
-    },
-    [applyTheme, storageKey]
   )
 
   React.useEffect(() => {
@@ -174,17 +167,5 @@ export function ThemeProvider({
     }
   }, [defaultTheme, storageKey])
 
-  const value = React.useMemo(
-    () => ({
-      theme,
-      setTheme,
-    }),
-    [theme, setTheme]
-  )
-
-  return (
-    <ThemeProviderContext.Provider {...props} value={value}>
-      {children}
-    </ThemeProviderContext.Provider>
-  )
+  return children
 }
