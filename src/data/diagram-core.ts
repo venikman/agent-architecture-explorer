@@ -145,3 +145,46 @@ export const NODE_COLORS = {
 >
 
 export const ARROW_COLOR = "var(--diagram-arrow)"
+
+/* ─── Data flow types ─── */
+
+export type DataFlowType =
+  | "query"       // IO → LLM: user input, requests
+  | "response"    // LLM → IO, Tool → IO: answers, assembled output
+  | "tool-assist" // LLM → Tool (dashed), Tool → LLM: tool calls & results
+  | "structured"  // LLM → Tool (solid), LLM → LLM, Tool → Tool: handoffs, routing
+  | "approval"    // IO → Tool: human review / approval signals
+  | "control"     // * → Danger, Danger → *: safety/compliance
+
+export const DATA_FLOW_COLORS: Record<DataFlowType, { dot: string; label: string }> = {
+  query:       { dot: "var(--diagram-llm-border)",    label: "Query / input" },
+  response:    { dot: "var(--diagram-io-border)",     label: "Response / output" },
+  "tool-assist": { dot: "var(--diagram-tool-border)", label: "Tool call / result" },
+  structured:  { dot: "var(--diagram-llm-text)",      label: "Structured data" },
+  approval:    { dot: "var(--diagram-io-text)",        label: "Approval signal" },
+  control:     { dot: "var(--diagram-danger-border)",  label: "Safety control" },
+}
+
+/** Infer data flow type from source/target node types */
+export function inferDataFlowType(
+  sourceType: NodeType,
+  targetType: NodeType,
+  dashed: boolean
+): DataFlowType {
+  // Any edge involving a danger node = control
+  if (sourceType === "danger" || targetType === "danger") return "control"
+  // IO → LLM = query
+  if (sourceType === "io" && targetType === "llm") return "query"
+  // LLM → IO or Tool → IO = response
+  if (targetType === "io") return "response"
+  // IO → Tool = approval
+  if (sourceType === "io" && targetType === "tool") return "approval"
+  // LLM → Tool dashed or Tool → LLM = tool-assist
+  if (
+    (sourceType === "llm" && targetType === "tool" && dashed) ||
+    (sourceType === "tool" && targetType === "llm")
+  )
+    return "tool-assist"
+  // Everything else (LLM→Tool solid, LLM→LLM, Tool→Tool) = structured
+  return "structured"
+}

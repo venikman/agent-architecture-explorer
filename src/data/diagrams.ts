@@ -3,10 +3,12 @@ import { diagrams } from "@/data/diagram-catalog"
 export { diagramSections, diagrams } from "@/data/diagram-catalog"
 export {
   ARROW_COLOR,
+  DATA_FLOW_COLORS,
   HEALTHCARE_ACTIVE_STAGES,
   HEALTHCARE_STAGES,
   HEALTHCARE_STAGE_LABELS,
   NODE_COLORS,
+  inferDataFlowType,
   type DiagramArrow,
   type DiagramArrowDefinition,
   type DiagramBand,
@@ -19,6 +21,7 @@ export {
   type DiagramScene,
   type DiagramStagePatch,
   type DiagramView,
+  type DataFlowType,
   type HealthcareStage,
   type NodeType,
 } from "@/data/diagram-core"

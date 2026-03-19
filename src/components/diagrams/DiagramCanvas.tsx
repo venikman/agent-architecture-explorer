@@ -9,9 +9,11 @@ import {
 
 import {
   NODE_COLORS,
+  DATA_FLOW_COLORS,
   buildDiagramScene,
   buildNodeDetailContext,
   getDescriptiveNodes,
+  inferDataFlowType,
   type DiagramNode as DiagramNodeData,
   type DiagramScene,
   type DiagramView,
@@ -44,7 +46,18 @@ interface DiagramCanvasProps {
 
 /* ─── Scene → React Flow adapter ─── */
 
+/** Base delay before any entrance animation starts */
+const ENTRANCE_BASE = 0.08
+/** Stagger increment per node (seconds) */
+const NODE_STAGGER = 0.06
+/** Extra delay for edges — they start after nodes begin appearing */
+const EDGE_OFFSET = 0.18
+
 function buildFlowNodes(scene: DiagramScene): Node<AgentNodeData>[] {
+  // Sort by x then y to compute left-to-right, top-to-bottom stagger
+  const sorted = [...scene.nodes].sort((a, b) => a.x - b.x || a.y - b.y)
+  const orderMap = new Map(sorted.map((n, i) => [n.id, i]))
+
   return scene.nodes.map((node) => ({
     id: node.id,
     type: "agentNode",
@@ -54,6 +67,7 @@ function buildFlowNodes(scene: DiagramScene): Node<AgentNodeData>[] {
       nodeType: node.type,
       w: node.w,
       h: node.h,
+      entranceDelay: ENTRANCE_BASE + (orderMap.get(node.id) ?? 0) * NODE_STAGGER,
     },
     draggable: false,
     selectable: false,
@@ -62,21 +76,42 @@ function buildFlowNodes(scene: DiagramScene): Node<AgentNodeData>[] {
 }
 
 function buildFlowEdges(scene: DiagramScene): Edge<AgentEdgeData>[] {
-  return scene.arrows.map((arrow) => ({
-    id: arrow.id,
-    type: "agentEdge",
-    source: arrow.from,
-    target: arrow.to,
-    data: {
-      fromPoint: arrow.fromPoint,
-      toPoint: arrow.toPoint,
-      direction: arrow.direction,
-      dashed: Boolean(arrow.dashed),
-      edgeLabel: arrow.label,
-    },
-    selectable: false,
-    focusable: false,
-  }))
+  // Build node type lookup for data flow classification
+  const nodeTypeMap = new Map(scene.nodes.map((n) => [n.id, n.type]))
+  // Sort edges by the source node's x position so they draw left-to-right
+  const nodeXMap = new Map(scene.nodes.map((n) => [n.id, n.x]))
+  const sorted = [...scene.arrows].sort(
+    (a, b) => (nodeXMap.get(a.from) ?? 0) - (nodeXMap.get(b.from) ?? 0)
+  )
+  const orderMap = new Map(sorted.map((a, i) => [a.id, i]))
+
+  return scene.arrows.map((arrow) => {
+    const sourceType = nodeTypeMap.get(arrow.from) ?? "io"
+    const targetType = nodeTypeMap.get(arrow.to) ?? "io"
+    const dashed = Boolean(arrow.dashed)
+    const flowType = inferDataFlowType(sourceType, targetType, dashed)
+
+    return {
+      id: arrow.id,
+      type: "agentEdge",
+      source: arrow.from,
+      target: arrow.to,
+      data: {
+        fromPoint: arrow.fromPoint,
+        toPoint: arrow.toPoint,
+        direction: arrow.direction,
+        dashed,
+        edgeLabel: arrow.label,
+        entranceDelay:
+          ENTRANCE_BASE +
+          EDGE_OFFSET +
+          (orderMap.get(arrow.id) ?? 0) * NODE_STAGGER,
+        flowColor: DATA_FLOW_COLORS[flowType].dot,
+      },
+      selectable: false,
+      focusable: false,
+    }
+  })
 }
 
 /* ─── Marker overlay (viewport-space buttons pinned to nodes) ─── */
@@ -103,7 +138,7 @@ function DiagramMarkerOverlay({
         return (
           <button
             aria-label={`Select ${node.label.replaceAll("\n", " ")}`}
-            className="pointer-events-auto absolute flex size-6 items-center justify-center rounded-full border bg-background/95 shadow-sm transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="pointer-events-auto absolute flex size-7 items-center justify-center rounded-full border-2 bg-background/95 shadow-md transition-all hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             key={node.id}
             onClick={() => setSelectedNodeId(node.id)}
             style={{
@@ -111,12 +146,22 @@ function DiagramMarkerOverlay({
               color: colors.text,
               left: posX,
               top: posY,
+              boxShadow: isSelected
+                ? `0 0 0 3px ${colors.glow}, 0 2px 8px ${colors.glow}`
+                : undefined,
             }}
             type="button"
           >
+            {/* Pulse ring animation on non-selected markers */}
+            {!isSelected ? (
+              <span
+                className="absolute inset-0 animate-ping rounded-full opacity-30"
+                style={{ background: colors.border, animationDuration: "2.5s" }}
+              />
+            ) : null}
             <span
-              className="size-2 rounded-full"
-              style={{ background: colors.text }}
+              className="relative size-2.5 rounded-full"
+              style={{ background: isSelected ? colors.text : colors.border }}
             />
           </button>
         )
@@ -133,12 +178,12 @@ function DiagramCameraControls() {
   const zoomPercent = Math.round(zoom * 100)
 
   return (
-    <div className="pointer-events-none absolute top-3 right-3 z-20 flex items-center gap-2">
+    <div className="pointer-events-none absolute top-3 right-3 z-20 flex items-center gap-1.5">
       <Button
         aria-label="Zoom out"
         className="pointer-events-auto"
         onClick={() => zoomOut({ duration: 160 })}
-        size="sm"
+        size="icon-sm"
         type="button"
         variant="outline"
       >
@@ -146,7 +191,7 @@ function DiagramCameraControls() {
       </Button>
       <Button
         aria-label="Reset zoom"
-        className="pointer-events-auto min-w-[4.5rem]"
+        className="pointer-events-auto min-w-[4rem] tabular-nums"
         onClick={() =>
           setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 160 })
         }
@@ -160,7 +205,7 @@ function DiagramCameraControls() {
         aria-label="Zoom in"
         className="pointer-events-auto"
         onClick={() => zoomIn({ duration: 160 })}
-        size="sm"
+        size="icon-sm"
         type="button"
         variant="outline"
       >
@@ -216,20 +261,25 @@ function ReactFlowSurface({
       zoomOnPinch
       zoomOnScroll
     >
-      {/* Shared arrow marker definition for all custom edges */}
+      {/* Shared SVG defs: arrow marker + dot grid pattern */}
       <svg className="absolute size-0">
         <defs>
+          {/* Arrow marker — slightly larger, filled triangle */}
           <marker
             id="diagram-arrow-marker"
-            markerHeight="8"
+            markerHeight="10"
             markerUnits="userSpaceOnUse"
-            markerWidth="8"
+            markerWidth="10"
             orient="auto"
-            refX="7"
-            refY="3"
+            refX="8"
+            refY="4"
           >
-            <path d="M 0 0 L 8 3 L 0 6 z" fill="var(--diagram-arrow)" />
+            <path d="M 1 0.5 L 9 4 L 1 7.5 Q 2.5 4 1 0.5 Z" fill="var(--diagram-arrow)" />
           </marker>
+          {/* Dot grid pattern */}
+          <pattern id="diagram-dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="10" cy="10" r="0.7" fill="var(--diagram-dot-muted)" />
+          </pattern>
         </defs>
       </svg>
       <DiagramMarkerOverlay
@@ -289,13 +339,18 @@ export function DiagramCanvas({
           <div className="overflow-auto">
             <div className="flex min-w-fit justify-center px-3 py-4 sm:px-6 sm:py-6">
               <div
-                className="relative overflow-hidden rounded-[1.25rem] border border-border/60 bg-[var(--diagram-surface)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
+                className="relative overflow-hidden rounded-2xl border border-border/50"
                 style={{
                   height: scene.height,
                   minWidth: scene.width,
                   width: scene.width,
+                  background: "var(--diagram-surface)",
                 }}
               >
+                {/* Dot grid overlay */}
+                <svg className="pointer-events-none absolute inset-0 size-full">
+                  <rect width="100%" height="100%" fill="url(#diagram-dot-grid)" />
+                </svg>
                 <ReactFlowSurface
                   descriptiveNodes={descriptiveNodes}
                   resetKey={diagram.id}

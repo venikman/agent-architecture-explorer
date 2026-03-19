@@ -212,7 +212,6 @@ export function DiagramDetailSheet({
     <Sheet modal={isMobile} open={Boolean(node)} onOpenChange={onOpenChange}>
       <SheetContent
         className="flex h-auto max-h-[85vh] w-full max-w-[28rem] flex-col gap-0 border-l bg-background p-0 sm:h-full sm:max-h-none sm:max-w-lg"
-        showOverlay={isMobile}
         side={isMobile ? "bottom" : "right"}
       >
         <SheetHeader className="gap-3 border-b px-5 py-4">
