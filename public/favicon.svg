@@ -1,8 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" fill="#f8f7f5" rx="8" />
-  <path d="M16 32h12m8 0h12M32 20v8m0 8v8" stroke="#3a3a5c" stroke-linecap="square" stroke-width="3" />
-  <rect x="24" y="12" width="16" height="16" fill="#e8e6f0" rx="3" stroke="#4a4a7a" stroke-width="2" />
-  <circle cx="16" cy="32" r="7" fill="#ffe8db" stroke="#ff4d00" stroke-width="2" />
-  <rect x="44" y="24" width="12" height="16" fill="#eae8f0" rx="3" stroke="#6a6a9a" stroke-width="2" />
-  <rect x="24" y="40" width="16" height="12" fill="#fde8e4" rx="3" stroke="#cc3d00" stroke-width="2" />
+  <rect width="64" height="64" fill="#faf8f5" rx="10" />
+  <!-- Orange accent bar (HumbleOps signature) -->
+  <rect x="8" y="10" width="3.5" height="44" rx="1.75" fill="#ff4d00" />
+  <!-- Navy nodes -->
+  <rect x="18" y="12" width="20" height="14" fill="#e8e6f0" rx="4" stroke="#3a3a5c" stroke-width="2.2" />
+  <rect x="36" y="36" width="20" height="14" fill="#e8e6f0" rx="4" stroke="#3a3a5c" stroke-width="2.2" />
+  <!-- Orange IO node -->
+  <ellipse cx="48" cy="19" rx="9" ry="7" fill="#fff0e8" stroke="#ff4d00" stroke-width="2.2" />
+  <!-- Warm tool node -->
+  <rect x="18" y="36" width="14" height="14" fill="#f5f0e8" rx="4" stroke="#8a8070" stroke-width="2" />
+  <!-- Connection arrows -->
+  <path d="M38 19 L39 19" stroke="#3a3a5c" stroke-width="1.8" />
+  <path d="M28 26 L28 36" stroke="#3a3a5c" stroke-width="1.8" stroke-dasharray="3 2" />
+  <path d="M32 43 L36 43" stroke="#3a3a5c" stroke-width="1.8" />
 </svg>
