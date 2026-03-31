@@ -167,7 +167,7 @@ function AgentEdge({ data, id }: EdgeProps<AgentEdgeType>) {
           <motion.text
             animate={{ x: labelPoint.x, y: labelPoint.y - 8 }}
             fill="var(--diagram-arrow)"
-            fontFamily="'Public Sans Variable', 'Geist Variable', system-ui, sans-serif"
+            fontFamily="'DM Sans', system-ui, sans-serif"
             fontSize={11}
             fontWeight={600}
             initial={false}

@@ -193,7 +193,7 @@ function AgentNode({ data }: NodeProps<AgentNodeType>) {
           <text
             dominantBaseline="middle"
             fill={colors.text}
-            fontFamily="'Public Sans Variable', 'Geist Variable', system-ui, sans-serif"
+            fontFamily="'DM Sans', system-ui, sans-serif"
             fontSize={w >= 180 ? 15 : 13}
             fontWeight={600}
             textAnchor="middle"
